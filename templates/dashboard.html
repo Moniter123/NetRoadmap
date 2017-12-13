@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DR-Prod 网络故障全局图</title>
+    <script src="../static/jquery-3.1.1.min.js" type="text/javascript"></script>
+    <script src="../static/jtopo-0.4.8-min.js" type="text/javascript"></script>
+    <script src="../static/bootstrap.min.js" type="text/javascript"></script>
+    <script type="text/javascript">
+
+        $(document).ready(function () {
+            var canvas = document.getElementById("canvas");
+            var stage = new JTopo.Stage(canvas);
+            var scene = new JTopo.Scene(stage);
+//            scene.background = '../img/bg.jpg';
+
+            stage.eagleEye.visible = true;
+
+            //JtopoDrawPointPath动画设置
+            CanvasRenderingContext2D.prototype.JtopoDrawPointPath = function (a, b, c, d, e, f) {
+                var animespeed = (new Date()) / 10;
+                var xs = c - a,
+                    xy = d - b,
+                    l = Math.floor(Math.sqrt(xs * xs + xy * xy)),
+                    colorlength = 50,
+                    j = l;
+                    xl = xs / l,
+                    yl = xy / l;
+                var colorpoint = animespeed % (l + colorlength) - colorlength;
+                for (var i = 0; i < j; i++) {
+                    if (((i) > colorpoint) && ((i) < (colorpoint + colorlength))) {
+                        this.beginPath();
+                        this.strokeStyle = e;
+                        this.moveTo(a + (i - 1) * xl, b + (i - 1) * yl);
+                        this.lineTo(a + i * xl, b + i * yl);
+                        this.stroke();
+                    } else {
+                        this.beginPath();
+                        this.strokeStyle = f;
+                        this.moveTo(a + (i - 1) * xl, b + (i - 1) * yl);
+                        this.lineTo(a + i * xl, b + i * yl)
+                        this.stroke();
+                    }
+                }
+            };
+
+            function addNode(x, y, str, img, level) {
+                var node = new JTopo.Node(str);
+                node.serializedProperties.push('id');
+                node.serializedProperties.push('level');
+                node.setLocation(x,y);
+                node.textPosition = 'Bottom_Center';
+                node.fontColor = '0.0.0';
+                node.setSize(80,50);
+                node.id = x * y;
+                node.level = 5;
+                if (null != img){
+                    node.setImage('../static/images/' + img ,false);
+                }
+                if (level == 1){
+                    node.alarm = '节点网络告警';
+//                    node.alarmColor = '0,0,0';
+                    node.alarmAlpha = 0.4;
+                }
+                //待定
+//                node.textPosition = textPosition;
+//                node.fontColor = '0,0,0';
+//                node.setSize(80, 40);
+//                node.addEventListener('mouseup', function (event) {
+//                    handler(event, node);
+//                });
+//                node.addEventListener('click', function (event) {
+//                    endNode = node;
+//                    if (null != currentNode && currentNode != endNode) {
+//                        Addlink(currentNode, endNode);
+//                        currentNode = null;
+//                    }
+//                });
+                scene.add(node);
+                return node;
+            }
+
+            //连接node
+            function linkNode(nodeA,nodeB,str ,level) {
+                var link;
+                link = new JTopo.Link(nodeA,nodeB,str);
+                link.direction = 'vertical';
+                link.fontColor = '0, 200, 255'; //设置str的颜色
+//                link2.dashedPattern = level; // 虚线
+                scene.add(link);
+//                return link;
+            }
+
+            //主机间连接
+            function  hostLink(nodeA,nodeB,str,level) {
+                var link = new JTopo.FlexionalLink(nodeA,nodeB,str);
+                link.shadow = false;
+                link.offsetGap = 44;
+                link.fontColor = '0, 200, 255'; //设置str的颜色
+                scene.add(link);
+                return link;
+            }
+
+            //主机间 直线连接
+            function newHostLink(nodeZ, nodeH, str,level) {
+                var link = new JTopo.Link(nodeZ, nodeH, str);
+                link.lineWidth = 2; // 线宽
+                link.dashedPattern = 5; // 虚线
+                link.bundleOffset = 60; // 折线拐角处的长度
+                link.bundleGap = 20; // 线条之间的间隔
+                link.textOffsetY = 3; // 文本偏移量（向下3个像素）
+                link.strokeColor = '0,200,255';
+                link.fontColor = '0, 200, 255'; //设置str的颜色
+                scene.add(link);
+                return link;
+            }
+
+            //节点间连接
+            function dedicatedLink(node1, node2, str,level) {
+                var link = new JTopo.Link(node1, node2, str);
+                link.PointPathColor = "rgb(221,160,221)";
+                link.lineWidth = 4;//线宽
+                link.bundleOffset = 60;
+                link.bundleGap = 20;
+                link.textOffsetY = 3;
+                link.fontColor = '0, 200, 255'; //设置str的颜色
+                link.paintPath = function (a, b) {
+                    if (this.nodeA === this.nodeZ) return void this.paintLoop(a);
+                    a.beginPath(),
+                        a.moveTo(b[0].x, b[0].y);
+                    for (var c = 1; c < b.length; c++) {
+                        null == this.dashedPattern ? (
+                            (null == this.PointPathColor ? a.lineTo(b[c].x, b[c].y) : a.JtopoDrawPointPath(b[c - 1].x, b[c - 1].y, b[c].x, b[c].y, a.strokeStyle, this.PointPathColor))
+                        ) : a.JTopoDashedLineTo(b[c - 1].x, b[c - 1].y, b[c].x, b[c].y, this.dashedPattern)
+                    }
+                    if (a.stroke(), a.closePath(), null != this.arrowsRadius) {
+                        var d = b[b.length - 2],
+                            e = b[b.length - 1];
+                        this.paintArrow(a, d, e)
+                    }
+                };
+                scene.add(link);
+            }
+
+            //曲线
+            function newCurveLink(nodeA, nodeZ, str, level){
+                var link2 = new JTopo.Link(nodeA, nodeZ, str);
+                link2.lineWidth = 3; // 线宽
+                link2.dashedPattern = 5; // 虚线
+                link2.bundleOffset = 60; // 折线拐角处的长度
+                link2.bundleGap = 20; // 线条之间的间隔
+                link2.textOffsetY = 3; // 文本偏移量（向下3个像素）
+                link2.strokeColor = '0,200,255';
+                link2.fontColor = '0, 200, 255'; //设置str的颜色
+                scene.add(link2);
+                return link2;
+            }
+
+
+            $.ajax({
+                url: "/run",
+                type: 'get',
+                //dataType: '',
+                //data: {
+                //},
+                success: function(data,status,response){
+                    var the_task_id = response.getResponseHeader('task_id');
+                    if (the_task_id){
+                        update_progress(the_task_id)
+                    }
+                },
+                error: function(){
+                    alert('Unexpected error');
+                }
+             })
+
+            var jsonStr = '[{"elementType": "node", "host": "stnc-extranet", "ip": "211.148.20.97", "x": 255, "y": 25, "id": 6375,"img": "cloud.jpg", "text": "internet (100M)", "value": "0", "limit": "100 M", "level": 0},{"elementType": "node", "host": "fw201", "ip": "10.16.132.101", "x": 255, "y": 145, "id": 36975, "img": "ER16.jpg","text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "sw2-core1", "ip": "10.16.147.2", "x": 255, "y": 295, "id": 75225,"img": "5200.jpg", "text": "sw_core2", "value": "0", "limit": "100 M", "level": 0},{"elementType": "node", "host": "stnc-zabserver", "ip": "10.16.142.23", "x": 465, "y": 465, "id": 216225,"img": "server.jpg", "text": "", "value": "0", "limit": "100 M", "level": 0},{"elementType": "node", "host": "stnc_app_gateway", "ip": "10.16.142.1", "x": 255, "y": 465, "id": 118575,"img": "middle.jpg", "text": "sw_200", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "main_dns_server", "ip": "10.16.78.202", "x": 25, "y": 600, "id": 15000,"img": "server.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "spare_dns_server", "ip": "10.16.78.201", "x": 135, "y": 650, "id": 87750,"img": "server.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "app204", "ip": "10.16.142.23", "x": 255, "y": 600, "id": 153000,"img": "server.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "app205", "ip": "10.16.142.23", "x": 375, "y": 650, "id": 243750,"img": "server.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "app206", "ip": "10.16.142.23", "x": 495, "y": 600, "id": 297000,"img": "server.jpg", "text": "db206", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "ucloud_proxy", "ip": "10.15.101.173", "x": 1005, "y": 25, "id": 25125,"img": "cloud.jpg", "text": "ucloud (100M)", "value": "0", "limit": "100M", "level": 0},{"elementType": "node", "host": "gds-extranet", "ip": "103.251.84.217", "x": 1200, "y": 25, "id": 30000,"img": "cloud.jpg", "text": "internet (75M)", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "fw101", "ip": "10.16.68.101", "x": 1075, "y": 145, "id": 155875,"img": "ER16.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "sw1-core1", "ip": "10.16.64.17", "x": 1000, "y": 295, "id": 295000,"img": "5200.jpg", "text": "sw_core1", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "gds_app_gateway", "ip": "10.16.78.1", "x": 915, "y": 465, "id": 425475,"img": "2948.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "sw_101", "ip": "10.16.76.43", "x": 1215, "y": 465, "id": 564975,"img": "2948.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "nginx_vip", "ip": "10.16.74.240", "x": 1215, "y": 295, "id": 358425,"img": "2948.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "lb101", "ip": "10.16.74.241", "x": 1405, "y": 295, "id": 414475,"img": "server.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "lb102", "ip": "10.16.74.242", "x": 1405, "y": 395, "id": 554975,"img": "server.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "applb-vip", "ip": "10.16.78.230", "x": 750, "y": 600, "id": 450000,"img": "serve.jpg", "text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "app120", "ip": "10.16.78.40", "x": 879, "y": 650, "id": 571350,"img": "serve.jpg", "text": "app120", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "zabserver", "ip": "10.16.78.32", "x": 995, "y": 600, "id": 597000,"img": "serve.jpg", "text": "zabserver", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "db101", "ip": "10.16.74.41", "x": 1105, "y": 600, "id": 663000, "img": "8260.jpg","text": "", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "ora101", "ip": "10.16.76.11", "x": 1225, "y": 600, "id": 735000,"img": "8260.jpg", "text": "ora101", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "db114", "ip": "10.16.76.43", "x": 1355, "y": 570, "id": 772350,"img": "2948.jpg", "text": "db114", "value": "0", "limit": "0", "level": 0},{"elementType": "node", "host": "zabbix_db", "ip": "10.16.76.43", "x": 1485, "y": 673, "id": 999405,"img": "serve.jpg", "text": "10.16.76.43", "value": "0", "limit": "0", "level": 0},{"elementType": "linkNode", "host": "stnc-extranet", "nodeAid": 6375, "nodeZid": 36975, "text": "0", "level": 0},{"elementType": "linkNode", "host": "fw201", "nodeAid": 36975, "nodeZid": 75225, "text": "0", "level": 0},{"elementType": "linkNode", "host": "stnc-zabserver", "nodeAid": 118575, "nodeZid": 216225, "text": "0","level": 0},{"elementType": "linkNode", "host": "stnc_app_gateway", "nodeAid": 75225, "nodeZid": 118575, "text": "0","level": 0},{"elementType": "hostLink", "host": "main_dns_server", "nodeAid": 118575, "nodeZid": 15000, "text": "0","level": 0},{"elementType": "hostLink", "host": "spare_dns_server", "nodeAid": 118575, "nodeZid": 87750, "text": "0","level": 0},{"elementType": "hostLink", "host": "app204", "nodeAid": 118575, "nodeZid": 153000, "text": "0", "level": 0},{"elementType": "hostLink", "host": "app205", "nodeAid": 118575, "nodeZid": 243750, "text": "0", "level": 0},{"elementType": "hostLink", "host": "app206", "nodeAid": 118575, "nodeZid": 297000, "text": "0", "level": 0},{"elementType": "linkNode", "host": "ucloud_proxy", "nodeAid": 25125, "nodeZid": 155875, "text": "0", "level": 0},{"elementType": "linkNode", "host": "gds-extranet", "nodeAid": 30000, "nodeZid": 155875, "text": "0", "level": 0},{"elementType": "linkNode", "host": "fw101", "nodeAid": 155875, "nodeZid": 295000, "text": "0", "level": 0},{"elementType": "linkNode", "host": "sw1-core1", "nodeAid": 295000, "nodeZid": 425475, "text": "0", "level": 0},{"elementType": "linkNode", "host": "sw_101", "nodeAid": 295000, "nodeZid": 564975, "text": "0", "level": 0},{"elementType": "linkNode", "host": "nginx_vip", "nodeAid": 295000, "nodeZid": 358425, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "lb101", "nodeAid": 358425, "nodeZid": 414475, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "lb102", "nodeAid": 358425, "nodeZid": 554975, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "applb-vip", "nodeAid": 425475, "nodeZid": 450000, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "app120", "nodeAid": 425475, "nodeZid": 571350, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "gds_app_gateway", "nodeAid": 425475, "nodeZid": 597000, "text": "0","level": 0},{"elementType": "newHostLink", "host": "db101", "nodeAid": 564975, "nodeZid": 663000, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "ora101", "nodeAid": 564975, "nodeZid": 735000, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "db114", "nodeAid": 564975, "nodeZid": 772350, "text": "0", "level": 0},{"elementType": "newHostLink", "host": "zabbix_db", "nodeAid": 772350, "nodeZid": 999405, "text": "0","level": 0},{"elementType": "dedicatedLink", "host": "sw2-core1", "nodeAid": 75225, "nodeZid": 295000, "text": "0","level": 0}]';
+            function  update_progress(the_task_id) {
+                $.get("/status/" + the_task_id,function (data) {
+                    console.log("next http request ...")
+                    if (data['state'] == 'success'){
+                        draw_scene(data['data']);
+                    }else{
+                        draw_scene(jsonStr);
+                        setTimeout(function () {
+                            update_progress(the_task_id);
+                        },8000);
+                    }
+                });
+            }
+
+            function draw_scene(todolists) {
+                //每次清理桌布
+                scene.clear();
+                //var jsonStr = '[{"elementType":"node","host":"stnc-extranet","ip":"211.148.20.97","x":255,"y":23,"id":5865,"img":"cloud.jpg","text":"internet (100M)","value":"0","limit":"100 M","level":0},{"elementType":"node","host":"fw201","ip":"10.16.132.101","x":255,"y":125,"id":31875,"img":"ER16.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"sw2-core1","ip":"10.16.147.2","x":255,"y":275,"id":70125,"img":"5200.jpg","text":"sw_core2","value":"0","limit":"100 M","level":0},{"elementType":"node","host":"stnc-zabserver","ip":"10.16.142.23","x":455,"y":425,"id":193375,"img":"server.jpg","text":"","value":"0","limit":"100 M","level":0},{"elementType":"node","host":"stnc_app_gateway","ip":"10.16.142.1","x":255,"y":425,"id":108375,"img":"middle.jpg","text":"sw_200","value":"0","limit":"0","level":0},{"elementType":"node","host":"main_dns_server","ip":"10.16.78.202","x":15,"y":600,"id":9000,"img":"server.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"spare_dns_server","ip":"10.16.78.201","x":135,"y":600,"id":81000,"img":"server.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"app204","ip":"10.16.142.23","x":255,"y":600,"id":153000,"img":"server.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"app205","ip":"10.16.142.23","x":375,"y":600,"id":225000,"img":"server.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"app206","ip":"10.16.142.23","x":495,"y":600,"id":297000,"img":"server.jpg","text":"db206","value":"0","limit":"0","level":0},{"elementType":"node","host":"ucloud_proxy","ip":"10.15.101.173","x":1005,"y":23,"id":23115,"img":"cloud.jpg","text":"ucloud (100M)","value":"0","limit":"100M","level":0},{"elementType":"node","host":"gds-extranet","ip":"103.251.84.217","x":1155,"y":23,"id":26565,"img":"cloud.jpg","text":"internet (75M)","value":"0","limit":"0","level":0},{"elementType":"node","host":"fw101","ip":"10.16.68.101","x":1075,"y":125,"id":134375,"img":"ER16.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"sw1-core1","ip":"10.16.64.17","x":1075,"y":275,"id":295625,"img":"5200.jpg","text":"sw_core1","value":"0","limit":"0","level":0},{"elementType":"node","host":"gds_app_gateway","ip":"10.16.78.1","x":955,"y":425,"id":405875,"img":"2948.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"sw_101","ip":"10.16.76.43","x":1215,"y":425,"id":516375,"img":"2948.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"applb-vip","ip":"10.16.78.230","x":825,"y":600,"id":495000,"img":"serve.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"app120","ip":"10.16.78.40","x":879,"y":600,"id":527400,"img":"serve.jpg","text":"app111","value":"0","limit":"0","level":0},{"elementType":"node","host":"app112","ip":"10.16.78.32","x":995,"y":600,"id":597000,"img":"serve.jpg","text":"app112","value":"0","limit":"0","level":0},{"elementType":"node","host":"db101","ip":"10.16.74.41","x":1195,"y":600,"id":717000,"img":"8260.jpg","text":"","value":"0","limit":"0","level":0},{"elementType":"node","host":"ora101","ip":"10.16.76.11","x":1245,"y":600,"id":747000,"img":"8260.jpg","text":"db114","value":"0","limit":"0","level":0},{"elementType":"node","host":"zabbix_db","ip":"10.16.76.43","x":1365,"y":600,"id":819000,"img":"2948.jpg","text":"sw_103","value":"0","limit":"0","level":0},{"elementType":"node","host":"nginx-vip","ip":"10.16.74.240","x":1365,"y":750,"id":1023750,"img":"serve.jpg","text":"fincore","value":"0","limit":"0","level":0},{"elementType":"linkNode","host":"stnc-extranet","nodeAid":5865,"nodeZid":31875,"text":"0","level":0},{"elementType":"linkNode","host":"fw201","nodeAid":31875,"nodeZid":70125,"text":"0","level":0},{"elementType":"linkNode","host":"stnc-zabserver","nodeAid":108375,"nodeZid":193375,"text":"0","level":0},{"elementType":"linkNode","host":"stnc_app_gateway","nodeAid":70125,"nodeZid":108375,"text":"0","level":0},{"elementType":"hostLink","host":"main_dns_server","nodeAid":108375,"nodeZid":9000,"text":"0","level":0},{"elementType":"hostLink","host":"spare_dns_server","nodeAid":108375,"nodeZid":81000,"text":"0","level":0},{"elementType":"hostLink","host":"app204","nodeAid":108375,"nodeZid":153000,"text":"0","level":0},{"elementType":"hostLink","host":"app205","nodeAid":108375,"nodeZid":225000,"text":"0","level":0},{"elementType":"hostLink","host":"app206","nodeAid":108375,"nodeZid":297000,"text":"0","level":0},{"elementType":"linkNode","host":"ucloud_proxy","nodeAid":23115,"nodeZid":134375,"text":"0","level":0},{"elementType":"linkNode","host":"gds-extranet","nodeAid":26565,"nodeZid":134375,"text":"0","level":0},{"elementType":"linkNode","host":"fw101","nodeAid":134375,"nodeZid":295625,"text":"0","level":0},{"elementType":"linkNode","host":"sw1-core1","nodeAid":295625,"nodeZid":405875,"text":"0","level":0},{"elementType":"linkNode","host":"sw_101","nodeAid":295625,"nodeZid":516375,"text":"0","level":0},{"elementType":"newHostLink","host":"applb-vip","nodeAid":405875,"nodeZid":495000,"text":"0","level":0},{"elementType":"newHostLink","host":"app120","nodeAid":405875,"nodeZid":527400,"text":"0","level":0},{"elementType":"newHostLink","host":"gds_app_gateway","nodeAid":405875,"nodeZid":597000,"text":"0","level":0},{"elementType":"newHostLink","host":"db101","nodeAid":516375,"nodeZid":717000,"text":"0","level":0},{"elementType":"newHostLink","host":"ora101","nodeAid":516375,"nodeZid":747000,"text":"0","level":0},{"elementType":"newHostLink","host":"zabbix_db","nodeAid":516375,"nodeZid":819000,"text":"0","level":0},{"elementType":"newHostLink","host":"nginx-vip","nodeAid":819000,"nodeZid":1023750,"text":"0","level":0},{"elementType":"newCurveLink","host":"sw2-core1","nodeAid":70125,"nodeZid":295625,"text":"0","level":0},{"elementType":"dedicatedLink","host":"sw2-core1","nodeAid":70125,"nodeZid":295625,"text":"0","level":0}]';
+                // var jsonStr = todolists| tojson }};
+                var jsonObj = eval("(" + todolists + ")");
+                jsonObj.forEach(function (t) {
+                    if (t.elementType == "node"){
+                        addNode(t.x, t.y, t.host + "(" + t.ip + ")", t.img, t.level);
+                    }
+                });
+
+                jsonObj.forEach(function (t) {
+                    if (t.elementType == "linkNode"){
+                        var nodeA = scene.findElements(function (e) {
+                            return e.id == t.nodeAid;
+                        });
+
+                        var nodeZ =  scene.findElements(function (e) {
+                           return e.id == t.nodeZid;
+                        });
+                        if (nodeA[0] && nodeZ[0]){
+                            linkNode(nodeA[0], nodeZ[0], t.text, t.level);
+                        }
+                    }else if (t.elementType == "hostLink"){
+                        var nodeA = scene.findElements(function (e) {
+                            return e.id == t.nodeAid;
+                        });
+                        var nodeZ =  scene.findElements(function (e) {
+                            return e.id == t.nodeZid;
+                        });
+                        if (nodeA[0] && nodeZ[0]){
+                            hostLink(nodeA[0], nodeZ[0], t.text, t.level);
+                        }
+                    }else if (t.elementType == "newHostLink") {
+                        var nodeA = scene.findElements(function (e) {
+                            return e.id == t.nodeAid;
+                        });
+
+                        var nodeZ =  scene.findElements(function (e) {
+                            return e.id == t.nodeZid;
+                        });
+                        if (nodeA[0] && nodeZ[0]){
+                            newHostLink(nodeA[0], nodeZ[0], t.text, t.level);
+                        }
+                    }else if (t.elementType == "newCurveLink"){
+                        var nodeA = scene.findElements(function (e) {
+                            return e.id == t.nodeAid;
+                        });
+
+                        var nodeZ =  scene.findElements(function (e) {
+                            return e.id == t.nodeZid;
+                        });
+                        if (nodeA[0] && nodeZ[0]){
+                            newCurveLink(nodeA[0], nodeZ[0], t.text, t.level);
+                        }
+                    }else if (t.elementType == "dedicatedLink"){
+                        var nodeA = scene.findElements(function (e) {
+                            return e.id == t.nodeAid;
+                        });
+
+                        var nodeZ =  scene.findElements(function (e) {
+                            return e.id == t.nodeZid;
+                        });
+                        if (nodeA[0] && nodeZ[0]){
+                            dedicatedLink(nodeA[0], nodeZ[0], t.text, t.level);
+                        }
+                    }
+                });
+
+                //设置app203
+                setInterval(function () {
+                    var nodeA = null;
+                    jsonObj.forEach(function (t) {
+                        if (t.elementType == "node" && t.host == "stnc-zabserver" ) {
+                            nodeA = scene.findElements(function (e) {
+                                return e.id == t.id;
+                            });
+                        }});
+                    if(nodeA[0].alarm=='Zabbix Proxy'){
+                        nodeA[0].alarm  = null;
+                    } else{
+                        nodeA[0].alarm = 'Zabbix Proxy';
+                    }
+                },2500);
+
+
+                //设置app112
+                setInterval(function () {
+                    var nodeA = null;
+                    jsonObj.forEach(function (t) {
+                        if (t.elementType == "node" && t.host == "zabserver" ) {
+                            nodeA = scene.findElements(function (e) {
+                                return e.id == t.id;
+                            });
+                        }});
+                    if(nodeA[0].alarm=='Zabbix Server'){
+                        nodeA[0].alarm  = null;
+                    } else{
+                        nodeA[0].alarm = 'Zabbix Server';
+                    }
+                },2500);
+
+                //设置所有告警节点
+{#                setInterval(function () {#}
+{#                    var nodeA = null;#}
+{#                    jsonObj.forEach(function (t) {#}
+{#                        if (t.elementType == "node" && t.level == 1 ) {#}
+{#                            nodeA = scene.findElements(function (e) {#}
+{#                                return e.id == t.id;#}
+{#                            });#}
+{#                        }});#}
+{#                    if(nodeA != null && nodeA[0].alarm == null) {#}
+{#                        nodeA[0].alarm  = "节点网络告警";#}
+{#                    } else{#}
+{#                        nodeA[0].alarm = null;#}
+{#                        //node.alarmColor = '0,0,0';#}
+{#                    }#}
+{#                },1200);#}
+
+
+            }
+
+            // 新增2台防火墙间的连接
+            // newCurveLink(sw_core2,sw_core1,"20M 备线 (Vlan600)", "255,0,0");
+            // dedicatedLink(sw_core2,sw_core1,"20M 主线 (Vlan500)","255,0,0");
+        });
+    </script>
+</head>
+<body>
+<button title="万国机房" type="button" name = "万国机房" onclick="" >万国机房</button>
+<button title="科技网机房" type="button" name = "科技网机房" onclick="" >科技网机房</button>
+<button title="八号桥机房" type="button" name = "八号桥机房" onclick="" >八号桥机房</button>
+<button title="成都机房" type="button" name = "成都机房" onclick="" >成都机房</button>
+<button title="深圳机房" type="button" name = "深圳机房" onclick="" >深圳机房</button>
+<canvas width="1880"height="950"id="canvas"style=" background-color:rgba(238,238,238,0); border:1px solid #2d7bcd;"></canvas>
+</body>
+</html>
